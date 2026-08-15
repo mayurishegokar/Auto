@@ -1,0 +1,61 @@
+name: Naukri Auto Job Apply
+
+on:
+  # Trigger on commit push to dev branch
+  push:
+    branches:
+      - dev
+  # Schedule: 9:00 AM IST every day (03:30 UTC)
+  schedule:
+    - cron: '30 3 * * *'
+  # Manual trigger with option to run on dev branch
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to run on'
+        required: true
+        default: 'dev'
+
+jobs:
+  apply_jobs:
+    name: Run Job Application Bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 10  # Maximum run duration of 10 minutes
+
+    steps:
+      - name: Checkout dev branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'dev' }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Job Apply Bot
+        env:
+          CI: "true"
+          HEADLESS: "true"
+          NAUKRI_EMAIL: ${{ secrets.NAUKRI_EMAIL }}
+          NAUKRI_PASSWORD: ${{ secrets.NAUKRI_PASSWORD }}
+          JOB_KEYWORDS: ${{ vars.JOB_KEYWORDS || 'java' }}
+          JOB_LOCATION: ${{ vars.JOB_LOCATION || '' }}
+          MAX_PAGES: "5"
+          MAX_JOBS_PER_PAGE: "20"
+        run: |
+          python Jobapply.py
+
+      - name: Upload Debug Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-screenshots
+          path: "*.png"
+          if-no-files-found: ignore
