@@ -1,32 +1,32 @@
 name: Naukri Auto Job Apply
 
 on:
-  # Trigger on commit push to dev branch
+  # Trigger on commit push to master branch
   push:
     branches:
-      - dev
+      - master
   # Schedule: 9:00 AM IST every day (03:30 UTC)
   schedule:
     - cron: '30 3 * * *'
-  # Manual trigger with option to run on dev branch
+  # Manual trigger with option to run on master branch
   workflow_dispatch:
     inputs:
       branch:
         description: 'Branch to run on'
         required: true
-        default: 'dev'
+        default: 'master'
 
 jobs:
   apply_jobs:
     name: Run Job Application Bot
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Maximum run duration of 10 minutes
+    timeout-minutes: 15  # Maximum run duration of 15 minutes
 
     steps:
-      - name: Checkout dev branch
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch || 'dev' }}
+          ref: ${{ github.event.inputs.branch || 'master' }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -56,6 +56,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: error-screenshots
+          name: debug-screenshots
           path: "*.png"
           if-no-files-found: ignore
