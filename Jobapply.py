@@ -11,9 +11,9 @@ import random
 import urllib.parse
 
 # --- CONFIGURATION ---
-EMAIL = os.getenv("NAUKRI_EMAIL", "mayurirshegokar@gmail.com")
-PASSWORD = os.getenv("NAUKRI_PASSWORD", "Mayuri@2010")
-JOB_KEYWORDS = os.getenv("JOB_KEYWORDS", "java")
+EMAIL = os.getenv("NAUKRI_EMAIL") or "mayurirshegokar@gmail.com"
+PASSWORD = os.getenv("NAUKRI_PASSWORD") or "Mayuri@2010"
+JOB_KEYWORDS = os.getenv("JOB_KEYWORDS") or "Software Developer"
 JOB_LOCATION = os.getenv("JOB_LOCATION", "")          # Leave empty "" for all India or specify e.g. "Pune", "Bangalore"
 MAX_PAGES = int(os.getenv("MAX_PAGES", "5"))          # Maximum search pages to process
 MAX_JOBS_PER_PAGE = int(os.getenv("MAX_JOBS_PER_PAGE", "20")) # Max jobs to process per page
@@ -333,4 +333,4 @@ try:
 
 finally:
     if driver:
-        driver.quit()
+        driver.quit()

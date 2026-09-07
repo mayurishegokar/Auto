@@ -1,0 +1,6 @@
+# Logs and Screenshots
+*.log
+*.png
+__pycache__/
+*.py[cod]
+.env
