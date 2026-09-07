@@ -1,6 +1,7 @@
 # Logs and Screenshots
 *.log
 *.png
+screenshots/
 __pycache__/
 *.py[cod]
 .env

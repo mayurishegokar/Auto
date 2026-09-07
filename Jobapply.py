@@ -26,6 +26,20 @@ MAX_RUN_MINUTES = float(os.getenv("MAX_RUN_MINUTES", "12"))  # Maximum run durat
 MAX_RUN_SECONDS = MAX_RUN_MINUTES * 60 - 20                  # 20s buffer for clean shutdown
 START_TIME = time.time()
 
+# --- SCREENSHOT SETTINGS ---
+# Set SAVE_SCREENSHOTS="true" only if you want debug images saved in a separate 'screenshots/' subfolder
+SAVE_SCREENSHOTS = os.getenv("SAVE_SCREENSHOTS", "false").lower() in ("true", "1", "yes")
+SCREENSHOTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "screenshots")
+
+def capture_screenshot(filename):
+    """Saves screenshots only if SAVE_SCREENSHOTS is True, and always in a screenshots/ subfolder."""
+    if SAVE_SCREENSHOTS and driver:
+        try:
+            os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
+            driver.save_screenshot(os.path.join(SCREENSHOTS_DIR, filename))
+        except Exception:
+            pass
+
 # --- CHROME SETUP ---
 options = Options()
 options.add_argument("--start-maximized")
@@ -151,7 +165,7 @@ try:
         print(f"⚠️ Login interaction encountered issue: {e}")
 
     # Check login status
-    driver.save_screenshot("login_status.png")
+    capture_screenshot("login_status.png")
     if "nlogin" in driver.current_url:
         print("⚠️ Still on login page. (If running in GitHub Actions, Naukri may have prompted CAPTCHA/OTP).")
     else:
@@ -210,7 +224,7 @@ try:
 
             if not job_cards:
                 safe_kw = "".join(c if c.isalnum() else "_" for c in current_keyword)
-                driver.save_screenshot(f"search_error_{safe_kw}_page_{page_num}.png")
+                capture_screenshot(f"search_error_{safe_kw}_page_{page_num}.png")
                 print(f"⚠️ No job cards found for '{current_keyword}' on page {page_num}. Moving to next keyword.")
                 break
 
@@ -330,7 +344,7 @@ try:
 
                 except Exception as e:
                     safe_kw = "".join(c if c.isalnum() else "_" for c in current_keyword)
-                    driver.save_screenshot(f"error_job_{safe_kw}_{page_num}_{idx}.png")
+                    capture_screenshot(f"error_job_{safe_kw}_{page_num}_{idx}.png")
                     print(f"❌ Error on job #{idx}: {e}")
 
                 finally:
