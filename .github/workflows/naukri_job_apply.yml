@@ -47,9 +47,9 @@ jobs:
           HEADLESS: "true"
           NAUKRI_EMAIL: ${{ secrets.NAUKRI_EMAIL }}
           NAUKRI_PASSWORD: ${{ secrets.NAUKRI_PASSWORD }}
-          JOB_KEYWORDS: ${{ vars.JOB_KEYWORDS || 'Software Developer' }}
+          JOB_KEYWORDS: ${{ vars.JOB_KEYWORDS || 'Software Developer, Java Developer, React Developer' }}
           JOB_LOCATION: ${{ vars.JOB_LOCATION || '' }}
-          MAX_PAGES: "5"
+          MAX_PAGES: "3"
           MAX_JOBS_PER_PAGE: "20"
         run: |
           python Jobapply.py

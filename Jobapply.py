@@ -13,7 +13,11 @@ import urllib.parse
 # --- CONFIGURATION ---
 EMAIL = os.getenv("NAUKRI_EMAIL") or "mayurirshegokar@gmail.com"
 PASSWORD = os.getenv("NAUKRI_PASSWORD") or "Mayuri@2010"
-JOB_KEYWORDS = os.getenv("JOB_KEYWORDS") or "Software Developer"
+# Support multiple comma-separated keywords (e.g. "Software Developer, Java Developer, React Developer")
+JOB_KEYWORDS = os.getenv("JOB_KEYWORDS") or "Software Developer, Java Developer, React Developer"
+KEYWORDS_LIST = [k.strip() for k in JOB_KEYWORDS.split(",") if k.strip()]
+if not KEYWORDS_LIST:
+    KEYWORDS_LIST = ["Software Developer"]
 JOB_LOCATION = os.getenv("JOB_LOCATION", "")          # Leave empty "" for all India or specify e.g. "Pune", "Bangalore"
 MAX_PAGES = int(os.getenv("MAX_PAGES", "5"))          # Maximum search pages to process
 MAX_JOBS_PER_PAGE = int(os.getenv("MAX_JOBS_PER_PAGE", "20")) # Max jobs to process per page
@@ -159,170 +163,190 @@ try:
     applied_count = 0
     already_applied_count = 0
     skipped_count = 0
-    page_num = 1
+    seen_job_links = set()
 
-    while page_num <= MAX_PAGES:
-        # Check overall runtime limit
+    print(f"\n🎯 Search Keywords ({len(KEYWORDS_LIST)}): {', '.join(KEYWORDS_LIST)}")
+
+    for kw_idx, current_keyword in enumerate(KEYWORDS_LIST, 1):
         if time.time() - START_TIME >= MAX_RUN_SECONDS:
-            print(f"\n⏰ Time limit reached ({int(time.time() - START_TIME)}s elapsed). Stopping gracefully.")
+            print(f"\n⏰ Overall run time limit reached ({int(time.time() - START_TIME)}s elapsed). Stopping gracefully.")
             break
 
-        search_url = build_search_url(JOB_KEYWORDS, JOB_LOCATION, page_num)
-        print(f"\n📄 Navigating to Page {page_num}: {search_url}")
-        driver.get(search_url)
-        time.sleep(4)
-        dismiss_popups()
+        print(f"\n{'='*55}")
+        print(f"🔍 [{kw_idx}/{len(KEYWORDS_LIST)}] Searching for: '{current_keyword}'")
+        print(f"{'='*55}")
 
-        # Wait for job listings to load
-        job_cards = []
-        card_xpaths = [
-            "//div[contains(@class, 'srp-jobtuple-wrapper')]",
-            "//div[contains(@class, 'cust-job-tuple')]",
-            "//div[contains(@class, 'jobTuple')]",
-            "//article[contains(@class, 'jobTuple')]",
-            "//div[@data-job-id]"
-        ]
-        
-        for xpath in card_xpaths:
-            try:
-                wait.until(EC.presence_of_element_located((By.XPATH, xpath)))
-                job_cards = driver.find_elements(By.XPATH, xpath)[:MAX_JOBS_PER_PAGE]
-                if job_cards:
-                    break
-            except Exception:
-                continue
-
-        if not job_cards:
-            driver.save_screenshot(f"search_error_page_{page_num}.png")
-            print(f"⚠️ No job cards found on page {page_num}. Screenshot saved as search_error_page_{page_num}.png.")
-            break
-
-        print(f"📋 Found {len(job_cards)} job listings on page {page_num}.")
-
-        for idx, card in enumerate(job_cards, 1):
+        page_num = 1
+        while page_num <= MAX_PAGES:
+            # Check overall runtime limit
             if time.time() - START_TIME >= MAX_RUN_SECONDS:
-                print(f"\n⏰ Time limit reached ({int(time.time() - START_TIME)}s elapsed). Exiting job loop.")
+                print(f"\n⏰ Time limit reached ({int(time.time() - START_TIME)}s elapsed). Stopping gracefully.")
                 break
 
-            main_window = driver.window_handles[0]
-            try:
-                # Scroll card into view
-                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", card)
-                time.sleep(0.8)
+            search_url = build_search_url(current_keyword, JOB_LOCATION, page_num)
+            print(f"\n📄 Navigating to Page {page_num} for '{current_keyword}': {search_url}")
+            driver.get(search_url)
+            time.sleep(4)
+            dismiss_popups()
 
-                # Extract job title and link
-                title_elem = None
-                for title_xpath in [
-                    ".//a[contains(@class, 'title')]",
-                    ".//a[contains(@class, 'job-title')]",
-                    ".//div[contains(@class, 'row1')]//a",
-                    ".//a[contains(@href, 'job-listings')]",
-                    ".//a[@title]",
-                    ".//a"
-                ]:
-                    matches = card.find_elements(By.XPATH, title_xpath)
-                    if matches:
-                        title_elem = matches[0]
+            # Wait for job listings to load
+            job_cards = []
+            card_xpaths = [
+                "//div[contains(@class, 'srp-jobtuple-wrapper')]",
+                "//div[contains(@class, 'cust-job-tuple')]",
+                "//div[contains(@class, 'jobTuple')]",
+                "//article[contains(@class, 'jobTuple')]",
+                "//div[@data-job-id]"
+            ]
+            
+            for xpath in card_xpaths:
+                try:
+                    wait.until(EC.presence_of_element_located((By.XPATH, xpath)))
+                    job_cards = driver.find_elements(By.XPATH, xpath)[:MAX_JOBS_PER_PAGE]
+                    if job_cards:
                         break
-
-                if not title_elem:
-                    print(f"⏭️ Skipping job #{idx}: Could not find job title element.")
+                except Exception:
                     continue
 
-                job_title = title_elem.text.strip()
-                job_link = title_elem.get_attribute("href")
+            if not job_cards:
+                safe_kw = "".join(c if c.isalnum() else "_" for c in current_keyword)
+                driver.save_screenshot(f"search_error_{safe_kw}_page_{page_num}.png")
+                print(f"⚠️ No job cards found for '{current_keyword}' on page {page_num}. Moving to next keyword.")
+                break
 
-                if not job_link or "javascript:" in job_link:
-                    print(f"⏭️ Skipping job #{idx}: Invalid job URL.")
-                    continue
+            print(f"📋 Found {len(job_cards)} job listings on page {page_num} for '{current_keyword}'.")
 
-                # Check keyword relevance if enabled
-                if FILTER_TITLE_KEYWORDS:
-                    keyword_tokens = [k.strip().lower() for k in JOB_KEYWORDS.split() if k.strip()]
-                    if not any(token in job_title.lower() for token in keyword_tokens):
-                        print(f"⏭️ Skipping job #{idx} ('{job_title}') — does not match keywords '{JOB_KEYWORDS}'.")
-                        skipped_count += 1
+            for idx, card in enumerate(job_cards, 1):
+                if time.time() - START_TIME >= MAX_RUN_SECONDS:
+                    print(f"\n⏰ Time limit reached ({int(time.time() - START_TIME)}s elapsed). Exiting job loop.")
+                    break
+
+                main_window = driver.window_handles[0]
+                try:
+                    # Scroll card into view
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", card)
+                    time.sleep(0.8)
+
+                    # Extract job title and link
+                    title_elem = None
+                    for title_xpath in [
+                        ".//a[contains(@class, 'title')]",
+                        ".//a[contains(@class, 'job-title')]",
+                        ".//div[contains(@class, 'row1')]//a",
+                        ".//a[contains(@href, 'job-listings')]",
+                        ".//a[@title]",
+                        ".//a"
+                    ]:
+                        matches = card.find_elements(By.XPATH, title_xpath)
+                        if matches:
+                            title_elem = matches[0]
+                            break
+
+                    if not title_elem:
+                        print(f"⏭️ Skipping job #{idx}: Could not find job title element.")
                         continue
 
-                print(f"\n🔍 Processing job #{idx} on page {page_num}: {job_title}")
+                    job_title = title_elem.text.strip()
+                    job_link = title_elem.get_attribute("href")
 
-                # Open job in new tab
-                driver.execute_script("window.open(arguments[0], '_blank');", job_link)
-                time.sleep(2)
+                    if not job_link or "javascript:" in job_link:
+                        print(f"⏭️ Skipping job #{idx}: Invalid job URL.")
+                        continue
 
-                if len(driver.window_handles) < 2:
-                    print("⚠️ Job did not open in new tab. Skipping.")
-                    continue
+                    # Avoid duplicate jobs across keywords
+                    if job_link in seen_job_links:
+                        print(f"⏭️ Skipping job #{idx} ('{job_title}'): Already processed in this run.")
+                        continue
+                    seen_job_links.add(job_link)
 
-                driver.switch_to.window(driver.window_handles[-1])
-                time.sleep(2.5)
-
-                current_url = driver.current_url.lower()
-
-                # Check if already applied
-                already_applied = driver.find_elements(
-                    By.XPATH, "//span[contains(text(), 'Already Applied') or contains(text(), 'Applied')] | //button[contains(text(), 'Applied')]"
-                )
-                if already_applied:
-                    print("ℹ️ Already applied to this job.")
-                    already_applied_count += 1
-                elif "naukri.com" not in current_url:
-                    print("🔁 External company website — skipping auto-apply.")
-                    skipped_count += 1
-                else:
-                    # Look for the Apply button
-                    apply_clicked = False
-                    apply_button_xpaths = [
-                        "//button[@id='apply-button']",
-                        "//button[contains(@class, 'apply-button') and not(contains(text(), 'Company'))]",
-                        "//div[contains(@class, 'apply-button-container')]//button",
-                        "//button[normalize-space(text())='Apply' or normalize-space(text())='Quick Apply' or normalize-space(text())='I am interested']",
-                        "//button[contains(text(), 'Apply on Naukri')]",
-                        "//span[normalize-space(text())='Apply' or normalize-space(text())='Apply on Naukri']/parent::button",
-                        "//button[contains(@class, 'waves-effect') and contains(., 'Apply')]"
-                    ]
-
-                    for btn_xpath in apply_button_xpaths:
-                        try:
-                            btn = WebDriverWait(driver, 3).until(EC.element_to_be_clickable((By.XPATH, btn_xpath)))
-                            driver.execute_script("arguments[0].click();", btn)
-                            apply_clicked = True
-                            print(f"✅ Clicked Apply for: {job_title}")
-                            applied_count += 1
-                            time.sleep(2)
-                            break
-                        except Exception:
+                    # Check keyword relevance if enabled
+                    if FILTER_TITLE_KEYWORDS:
+                        keyword_tokens = [k.strip().lower() for k in current_keyword.split() if len(k.strip()) > 1]
+                        if not any(token in job_title.lower() for token in keyword_tokens):
+                            print(f"⏭️ Skipping job #{idx} ('{job_title}') — does not match '{current_keyword}'.")
+                            skipped_count += 1
                             continue
 
-                    if not apply_clicked:
-                        company_site_btn = driver.find_elements(By.XPATH, "//button[contains(text(), 'Company Site') or contains(text(), 'company website')]")
-                        if company_site_btn:
-                            print("🔁 Job requires applying directly on company website — skipping.")
-                        else:
-                            print("⚠️ Apply button not found or already applied.")
+                    print(f"\n🔍 Processing job #{idx} on page {page_num} [{current_keyword}]: {job_title}")
+
+                    # Open job in new tab
+                    driver.execute_script("window.open(arguments[0], '_blank');", job_link)
+                    time.sleep(2)
+
+                    if len(driver.window_handles) < 2:
+                        print("⚠️ Job did not open in new tab. Skipping.")
+                        continue
+
+                    driver.switch_to.window(driver.window_handles[-1])
+                    time.sleep(2.5)
+
+                    current_url = driver.current_url.lower()
+
+                    # Check if already applied
+                    already_applied = driver.find_elements(
+                        By.XPATH, "//span[contains(text(), 'Already Applied') or contains(text(), 'Applied')] | //button[contains(text(), 'Applied')]"
+                    )
+                    if already_applied:
+                        print("ℹ️ Already applied to this job.")
+                        already_applied_count += 1
+                    elif "naukri.com" not in current_url:
+                        print("🔁 External company website — skipping auto-apply.")
                         skipped_count += 1
+                    else:
+                        # Look for the Apply button
+                        apply_clicked = False
+                        apply_button_xpaths = [
+                            "//button[@id='apply-button']",
+                            "//button[contains(@class, 'apply-button') and not(contains(text(), 'Company'))]",
+                            "//div[contains(@class, 'apply-button-container')]//button",
+                            "//button[normalize-space(text())='Apply' or normalize-space(text())='Quick Apply' or normalize-space(text())='I am interested']",
+                            "//button[contains(text(), 'Apply on Naukri')]",
+                            "//span[normalize-space(text())='Apply' or normalize-space(text())='Apply on Naukri']/parent::button",
+                            "//button[contains(@class, 'waves-effect') and contains(., 'Apply')]"
+                        ]
 
-                    # Handle optional questionnaire / chatbot drawer
-                    dismiss_popups()
+                        for btn_xpath in apply_button_xpaths:
+                            try:
+                                btn = WebDriverWait(driver, 3).until(EC.element_to_be_clickable((By.XPATH, btn_xpath)))
+                                driver.execute_script("arguments[0].click();", btn)
+                                apply_clicked = True
+                                print(f"✅ Clicked Apply for: {job_title}")
+                                applied_count += 1
+                                time.sleep(2)
+                                break
+                            except Exception:
+                                continue
 
-            except Exception as e:
-                driver.save_screenshot(f"error_job_{page_num}_{idx}.png")
-                print(f"❌ Error on job #{idx}: {e}")
+                        if not apply_clicked:
+                            company_site_btn = driver.find_elements(By.XPATH, "//button[contains(text(), 'Company Site') or contains(text(), 'company website')]")
+                            if company_site_btn:
+                                print("🔁 Job requires applying directly on company website — skipping.")
+                            else:
+                                print("⚠️ Apply button not found or already applied.")
+                            skipped_count += 1
 
-            finally:
-                # Safely close extra tabs and return to main search tab
-                try:
-                    while len(driver.window_handles) > 1:
-                        driver.switch_to.window(driver.window_handles[-1])
-                        driver.close()
-                    driver.switch_to.window(main_window)
-                except Exception:
-                    if driver.window_handles:
-                        driver.switch_to.window(driver.window_handles[0])
+                        # Handle optional questionnaire / chatbot drawer
+                        dismiss_popups()
 
-                time.sleep(random.uniform(1.0, 2.5))
+                except Exception as e:
+                    safe_kw = "".join(c if c.isalnum() else "_" for c in current_keyword)
+                    driver.save_screenshot(f"error_job_{safe_kw}_{page_num}_{idx}.png")
+                    print(f"❌ Error on job #{idx}: {e}")
 
-        page_num += 1
+                finally:
+                    # Safely close extra tabs and return to main search tab
+                    try:
+                        while len(driver.window_handles) > 1:
+                            driver.switch_to.window(driver.window_handles[-1])
+                            driver.close()
+                        driver.switch_to.window(main_window)
+                    except Exception:
+                        if driver.window_handles:
+                            driver.switch_to.window(driver.window_handles[0])
+
+                    time.sleep(random.uniform(1.0, 2.5))
+
+            page_num += 1
 
     print("\n" + "="*50)
     print("🎉 Run Complete!")
