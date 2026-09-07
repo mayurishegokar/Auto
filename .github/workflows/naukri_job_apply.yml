@@ -5,11 +5,11 @@ on:
   push:
     branches:
       - master
-  # Schedule: 3 times every day (9:00 AM, 2:00 PM, 7:00 PM IST)
+  # Schedule: 3 times every day (9:00 AM, 2:00 PM, 5:00 PM IST)
   schedule:
     - cron: '30 3 * * *'   # 09:00 AM IST (03:30 UTC)
     - cron: '30 8 * * *'   # 02:00 PM IST (08:30 UTC)
-    - cron: '30 13 * * *'  # 07:00 PM IST (13:30 UTC)
+    - cron: '30 11 * * *'  # 05:00 PM IST (11:30 UTC)
   # Manual trigger with option to run on master branch
   workflow_dispatch:
     inputs:
